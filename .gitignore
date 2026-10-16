@@ -20,3 +20,7 @@ public/build/
 public/hot
 package-lock.json
 trongate-framework.7z
+
+# Runtime logs (classes/Logger)
+logs/*
+!logs/.gitkeep

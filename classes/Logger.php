@@ -1,39 +1,54 @@
 <?php
 class Logger {
-    private $logFile;
-    
-    public function __construct($logFile = 'logs.txt') {
-        $this->logFile = realpath(__DIR__ . '/' . $logFile);
-        if (!file_exists($this->logFile)) {
-            $logDir = dirname($this->logFile);
-            
-            // Create the directory if it doesn't exist
-            if (!is_dir($logDir)) {
-                if (!mkdir($logDir, 0777, true)) {
-                    throw new Exception("Could not create log directory: " . $logDir);
-                }
-            }
-            
-            // Create the log file
-            if (!touch($this->logFile)) {
-                throw new Exception("Could not create log file: " . $this->logFile);
-            }
-        }
-        
-        // Check if the log file is writable
-        if (!is_writable($this->logFile)) {
-            throw new Exception("Log file is not writable: " . $this->logFile);
-        }
+    /** @var array<string, resource|false> open handles by target, shared by every Logger */
+    private static $streams = [];
+
+    /** @var list<string> */
+    private $targets;
+
+    /**
+     * @param string $logFile path relative to the app root; its directory
+     *        (logs/ by default) is a persistent path on trongate.cloud
+     */
+    public function __construct($logFile = 'logs/app.log') {
+        // The process's stdout and stderr (fd 1 and 2, not the response
+        // body), so the lines also show up in the container's logs
+        $this->targets = [APPPATH . $logFile, 'php://stdout', 'php://stderr'];
     }
+
     private function log($level, $message, $extra = null) {
-        $timestamp = date('Y-m-d H:i:s.u');
+        $timestamp = (new DateTimeImmutable())->format('Y-m-d H:i:s.u');
         $logEntry = "[{$timestamp}] [{$level}] {$message}\n";
         if ($extra !== null) {
             $logEntry .= var_export($extra, true) . "\n";
         }
-        // Open the log file and append the new log entry
-        file_put_contents($this->logFile, $logEntry, FILE_APPEND);
+        foreach ($this->targets as $target) {
+            $stream = self::stream($target);
+            if ($stream !== false) {
+                fwrite($stream, $logEntry);
+            }
+        }
     }
+
+    /**
+     * Opens a target on its first write and keeps the handle (append mode,
+     * so short lines from concurrent requests don't interleave). A target
+     * that can't be opened is skipped rather than failing the request: in
+     * production the app's files are read-only to the non-root container user.
+     *
+     * @return resource|false
+     */
+    private static function stream($target) {
+        if (!array_key_exists($target, self::$streams)) {
+            $dir = dirname($target);
+            if (!str_starts_with($target, 'php://') && !is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            self::$streams[$target] = @fopen($target, 'a');
+        }
+        return self::$streams[$target];
+    }
+
     public function debug($message, $extra = null) {
         $this->log('debug', $message, $extra);
     }
