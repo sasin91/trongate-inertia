@@ -7,7 +7,7 @@ class Logger {
      *        (logs/ by default) is a persistent path on trongate.cloud
      */
     public function __construct($logFile = 'logs/app.log') {
-        $this->logFile = dirname(__DIR__) . '/' . $logFile;
+        $this->logFile = APPPATH . $logFile;
         $logDir = dirname($this->logFile);
 
         if (!is_dir($logDir)) {
