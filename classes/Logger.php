@@ -1,39 +1,39 @@
 <?php
 class Logger {
     private $logFile;
-    
-    public function __construct($logFile = 'logs.txt') {
-        $this->logFile = realpath(__DIR__ . '/' . $logFile);
-        if (!file_exists($this->logFile)) {
-            $logDir = dirname($this->logFile);
-            
-            // Create the directory if it doesn't exist
-            if (!is_dir($logDir)) {
-                if (!mkdir($logDir, 0777, true)) {
-                    throw new Exception("Could not create log directory: " . $logDir);
-                }
-            }
-            
-            // Create the log file
-            if (!touch($this->logFile)) {
-                throw new Exception("Could not create log file: " . $this->logFile);
-            }
+
+    /**
+     * @param string $logFile path relative to the app root; its directory
+     *        (logs/ by default) is a persistent path on trongate.cloud
+     */
+    public function __construct($logFile = 'logs/app.log') {
+        $this->logFile = dirname(__DIR__) . '/' . $logFile;
+        $logDir = dirname($this->logFile);
+
+        if (!is_dir($logDir)) {
+            @mkdir($logDir, 0775, true);
         }
-        
-        // Check if the log file is writable
-        if (!is_writable($this->logFile)) {
-            throw new Exception("Log file is not writable: " . $this->logFile);
+
+        // Never take the request down over a log file: in production the
+        // app's files are read-only to the (non-root) container user.
+        if (!is_writable($this->logFile) && !(!file_exists($this->logFile) && is_writable($logDir))) {
+            $this->logFile = null;
         }
     }
+
     private function log($level, $message, $extra = null) {
         $timestamp = date('Y-m-d H:i:s.u');
         $logEntry = "[{$timestamp}] [{$level}] {$message}\n";
         if ($extra !== null) {
             $logEntry .= var_export($extra, true) . "\n";
         }
-        // Open the log file and append the new log entry
-        file_put_contents($this->logFile, $logEntry, FILE_APPEND);
+        if ($this->logFile !== null) {
+            file_put_contents($this->logFile, $logEntry, FILE_APPEND);
+        }
+        // Also to stderr, so the lines show up in the container's logs
+        file_put_contents('php://stderr', $logEntry);
     }
+
     public function debug($message, $extra = null) {
         $this->log('debug', $message, $extra);
     }
