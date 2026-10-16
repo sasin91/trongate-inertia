@@ -30,7 +30,9 @@ class Logger {
         if ($this->logFile !== null) {
             file_put_contents($this->logFile, $logEntry, FILE_APPEND);
         }
-        // Also to stderr, so the lines show up in the container's logs
+        // And to the process's stdout and stderr (fd 1 and 2, not the
+        // response body), so the lines show up in the container's logs
+        file_put_contents('php://stdout', $logEntry);
         file_put_contents('php://stderr', $logEntry);
     }
 
